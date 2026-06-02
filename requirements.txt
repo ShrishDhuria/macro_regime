@@ -1,0 +1,13 @@
+pandas>=2.1
+numpy>=1.26
+pyarrow>=14.0
+yfinance>=0.2.40
+requests>=2.31
+hmmlearn>=0.3.2
+matplotlib>=3.8
+scipy>=1.11
+openpyxl>=3.1
+lightgbm>=4.3
+streamlit>=1.32
+plotly>=5.20
+python-pptx>=0.6.23
