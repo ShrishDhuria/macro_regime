@@ -1,7 +1,10 @@
 """Translate stress shocks to portfolio asset return shocks via empirical betas."""
 from __future__ import annotations
+import logging
 import numpy as np
 import pandas as pd
+
+log = logging.getLogger(__name__)
 
 
 def _trigger_change_series(features, panel, trigger, shock_type):
@@ -39,6 +42,8 @@ def run_stress(features, panel, scenarios, asset_names, weights, window=156):
     for name, scen in scenarios.items():
         betas = compute_betas(features, panel, scen["trigger"], scen["shock_type"], asset_names, window)
         if betas is None:
+            log.warning(f"  stress: skipping '{name}' — trigger '{scen['trigger']}' "
+                        f"({scen['shock_type']}) not found in panel or features")
             continue
         asset_shocks = {a: betas[a] * scen["shock"] for a in asset_names}
         if scen["trigger"] in asset_names and scen["shock_type"] == "log_return":

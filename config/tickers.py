@@ -26,8 +26,12 @@ RATES = {
     "DE10Y": {"source": "fred", "symbol": "IRLTLT01DEM156N", "name": "Germany 10Y yield", "cadence": "monthly"},
     "FR10Y": {"source": "fred", "symbol": "IRLTLT01FRM156N", "name": "France 10Y yield",  "cadence": "monthly"},
     "IT10Y": {"source": "fred", "symbol": "IRLTLT01ITM156N", "name": "Italy 10Y yield",   "cadence": "monthly"},
-    # ESTR via ECB Data Portal. FRED mirror fallback ticker: ECBESTRVOLWGTTRMDMNRT
-    "ESTR":  {"source": "ecb",  "symbol": "EST.B.EU000A2X2A25.WT", "name": "Euro short-term rate", "cadence": "daily"},
+    # ESTR via FRED (ECBESTRVOLWGTTRMDMNRT), NOT the ECB Data Portal.
+    # The ECB host (data-api.ecb.europa.eu) is unreachable from some networks
+    # (DNS getaddrinfo failures); FRED mirrors the identical EST.B.EU000A2X2A25.WT
+    # series, keyless and reliably, and is consistent with the EONIA-via-FRED splice
+    # in features/short_rate.py. This removes the last live-ECB dependency.
+    "ESTR":  {"source": "fred", "symbol": "ECBESTRVOLWGTTRMDMNRT", "name": "Euro short-term rate", "cadence": "daily"},
 }
 
 MACRO = {

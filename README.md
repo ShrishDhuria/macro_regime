@@ -1,6 +1,5 @@
 # Macro Regime & Cross-Asset Risk Intelligence Platform
 
-<!-- Replace ShrishDhuria/macro_regime with your GitHub path; the badge renders once this repo is pushed and the workflow has run. -->
 [![tests](https://github.com/ShrishDhuria/macro_regime/actions/workflows/tests.yml/badge.svg)](https://github.com/ShrishDhuria/macro_regime/actions/workflows/tests.yml)
 
 > A regime-aware macro-financial research framework for European markets.
@@ -15,6 +14,24 @@
 This platform detects macroeconomic regimes across European cross-asset markets, computes regime-conditional risk metrics on a multi-asset portfolio, and tests tactical allocation strategies under realistic walk-forward backtest conditions. It is structured around six phases — data spine, feature engineering, regime detection, risk engine, tactical allocation, stress testing + deliverables — each producing concrete artifacts.
 
 The project's defining characteristic is its commitment to walk-forward methodology, lookahead-bias enforcement, and honest reporting of both positive and negative findings. The backtest results contain a deliberately documented negative finding: at weekly horizon, regime-based and ML-based tactical timing strategies underperform equal-weight, while a risk-parity baseline reduces volatility by ~30% with similar Sharpe. The institutional payoff of the regime detection layer is in *risk monitoring*, not return timing.
+
+---
+
+## Run it in one command
+
+The processed panels and the EONIA history are **committed to the repository**, so
+the dashboard and the headline figures work on a fresh clone with no rebuild, no
+FRED key, and no network call:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate          # Windows Git Bash: source .venv/Scripts/activate
+pip install -r requirements.txt
+streamlit run dashboard/app.py     # opens immediately on the committed panels
+```
+
+Re-running the build pipeline (below) is only needed to *refresh* the data or
+regenerate the artifacts from scratch.
 
 ---
 
@@ -41,7 +58,7 @@ The project's defining characteristic is its commitment to walk-forward methodol
 | Vol-Forecast (LightGBM) | 0.21 | -40.2% | 37% |
 | DD-Predict (LightGBM classifier) | 0.16 | -40.2% | 206% |
 
-*(Figures above are the original full-period run. The backtest now (a) classifies regimes out-of-sample with an annually-refit walk-forward HMM, (b) charges the spliced ESTR rate on leverage instead of assuming it free, and (c) scores all six strategies on the common post-2011 window so the timing strategies are not credited with the pre-signal VT-ERC path through the 2008 GFC. These shift the levels but not the ordering or the conclusion; re-run `build_strategies.py` to regenerate.)*
+*(The backtest (a) classifies regimes out-of-sample with an annually-refit walk-forward HMM, (b) charges the spliced ESTR rate on leverage instead of assuming it free, and (c) scores all six strategies on the common post-2011 window so the timing strategies are not credited with the pre-signal VT-ERC path through the 2008 GFC. Re-run `build_strategies.py` to regenerate.)*
 
 The regime-tilted strategy failed because the HMM crisis state captures both crash and recovery weeks; crisis-regime annualized return is +20.8% for EW, so cutting equity in crisis sells low and buys high. The drawdown classifier achieved AUC 0.51 — essentially no predictive signal at weekly horizon. **Conclusion: regime detection is a risk-monitoring tool, not a return-timing signal.**
 
@@ -53,7 +70,7 @@ The regime-tilted strategy failed because the HMM crisis state captures both cra
 macro_regime/
 ├── config/                    # ticker registry
 ├── data/
-│   ├── ingestion/             # yfinance, FRED, ECB fetchers
+│   ├── ingestion/             # yfinance, FRED, ECB fetchers (retry/backoff hardened)
 │   ├── alignment.py           # weekly Friday-close harmonization
 │   └── storage.py             # parquet I/O
 ├── features/                  # Phase 2 — 63-feature library
@@ -64,7 +81,7 @@ macro_regime/
 │   ├── momentum.py
 │   ├── macro_lag.py           # publication-lag enforcement
 │   ├── freshness.py           # staleness check
-│   └── short_rate.py          # EONIA/ESTR splice
+│   └── short_rate.py          # ESTR/EONIA splice (cache-first, ESTR-only fallback)
 ├── regimes/                   # Phase 3 — HMM core
 │   ├── data_prep.py
 │   ├── hmm_model.py           # multi-seed Gaussian HMM (full-sample)
@@ -89,9 +106,9 @@ macro_regime/
 │   └── metrics.py
 ├── stress/                    # Phase 6 — stress engine
 │   ├── scenarios.py
-│   └── transmission.py        # empirical-beta-based
+│   └── transmission.py        # empirical-beta-based (warns on skipped scenarios)
 ├── dashboard/
-│   └── app.py                 # Streamlit 4-tab dashboard
+│   └── app.py                 # Streamlit 4-tab dashboard (runs on committed panels)
 ├── scripts/                   # orchestrators (one per phase)
 │   ├── build_panel.py
 │   ├── build_features.py
@@ -101,7 +118,9 @@ macro_regime/
 │   ├── build_stress.py
 │   └── build_deck.py
 ├── reports/                   # generated artifacts (PNG, XLSX, PPTX)
-├── data_store/                # gitignored cache (raw + processed parquet)
+├── data_store/
+│   ├── raw/                   # gitignored API cache  (EONIA.parquet committed as a seed)
+│   └── panel/                 # committed processed panels + features
 ├── requirements.txt
 ├── sources.md                 # data provenance audit trail
 └── README.md
@@ -109,21 +128,9 @@ macro_regime/
 
 ---
 
-## Setup
+## Running the full pipeline (optional)
 
-Python 3.12+ recommended (3.10+ should work; the codebase avoids deprecated APIs).
-
-```bash
-python -m venv .venv
-source .venv/bin/activate          # Windows Git Bash: source .venv/Scripts/activate
-pip install -r requirements.txt
-```
-
----
-
-## Running the platform
-
-Each phase has one orchestrator. Run in order; later phases depend on earlier outputs.
+Each phase has one orchestrator. Run in order; later phases depend on earlier outputs. This is only needed to refresh the data — the committed panels already drive the dashboard.
 
 ```bash
 py scripts/build_panel.py        # Phase 1 — fetch and align the data spine
@@ -136,7 +143,7 @@ py scripts/build_deck.py         # Phase 6 — generate the methodology PowerPoi
 streamlit run dashboard/app.py   # Phase 6 — launch the interactive dashboard
 ```
 
-Total fresh-install runtime: approximately 5-7 minutes on a typical laptop.
+Total fresh-rebuild runtime: approximately 5-7 minutes on a typical laptop.
 (Use `python` instead of `py` on macOS/Linux.)
 
 ---
@@ -160,53 +167,36 @@ Total fresh-install runtime: approximately 5-7 minutes on a typical laptop.
 
 **Walk-forward.** LightGBM models refit every 13 weeks on expanding window. Covariance for ERC recomputed at each weekly rebalance on trailing 156-week window. The regime HMM used for tactical tilting is refit annually on an expanding window, standardized with training-window statistics only, and each week is classified by Viterbi-decoding the expanding prefix — so no future observation informs a week's regime label.
 
-**Funding cost.** Vol-targeted leverage is financed at the spliced ESTR/EONIA overnight rate rather than assumed free; idle cash earns the same rate.
+**Short-rate splice and provenance.** ESTR began 2 October 2019; EONIA (its predecessor) is spliced in for pre-2019 history with the 8.5bp adjustment per ECB Recommendation 2019/C 295/02, producing a level-consistent overnight rate back to 1999. The EONIA history is sourced from the **ECB Data Portal (EON dataset)** and cached in `data_store/raw/EONIA.parquet`, so the splice is reproducible offline and does not depend on a live ECB or FRED call. The short-rate builder reads the cache first and degrades gracefully to an ESTR-only series if no cache is present on a first-ever build during an outage.
 
-**Short-rate splice.** ESTR began October 2019; EONIA (its predecessor) is spliced in for pre-2019 history with the 8.5bp adjustment per ECB Recommendation 2019/C 295/02, producing a level-consistent overnight rate back to 2005.
+**Funding cost.** Vol-targeted leverage is financed at the spliced ESTR/EONIA overnight rate rather than assumed free; idle cash earns the same rate.
 
 **HMM stability.** Best-of-5 random-seed initialization for the 3-state model defends against local optima.
 
 **Realistic frictions.** 5bp one-way transaction cost charged on actual turnover.
 
----
-
-## Acknowledged limitations
-
-1. **HMM regime labels for tactical allocation are now fitted walk-forward.** The tilt consumes an annually-refit, expanding-window HMM (`regimes/walk_forward_hmm.py`) with per-window standardization and prefix-decoded, no-lookahead inference. Worth noting for interpretation: the *earlier* full-sample fit handed the regime-tilt strategy a lookahead advantage and it still lost to equal-weight — so removing that advantage can only reinforce the null finding, not overturn it. The full-sample labels are retained solely for the in-sample regime-conditional *risk* table, where they are a descriptive, not predictive, statistic.
-2. **Stress transmission uses linear empirical betas.** Tail co-movement is non-linear in practice; a more sophisticated version would use conditional copulas or a regime-switching factor model.
-3. **Weekly frequency limits ML training data.** The drawdown classifier achieved AUC 0.51, partly because weekly horizon yields few positive examples per refit window.
-4. **Italian and French 10Y yields can run ~90 days stale** due to FRED's OECD update cadence. Flagged at build time by the freshness check.
-5. **VSTOXX (V2X) unavailable on Yahoo Finance.** Replaced by SX5E rolling realized volatility.
-
----
-
-## Tech stack
-
-- **Modeling**: hmmlearn (HMM), LightGBM (forecasting), SciPy (optimization)
-- **Data**: pandas, numpy, pyarrow (parquet), requests, yfinance
-- **Visualization**: matplotlib, plotly (Streamlit)
-- **Deliverables**: openpyxl (Excel), python-pptx (PowerPoint), Streamlit (dashboard)
-- **All code**: Python 3.12, modular architecture
-
----
-
-## Author
-
-Shrish Dhuria · ESSEC Master in Finance · May 2026
-
-Built as a research framework demonstrating institutional methodology in regime detection, multi-asset risk analysis, and walk-forward tactical allocation. The negative finding on tactical regime-tilting is the deliberate intellectual contribution — research that documents what *doesn't* work, and why, is more useful than work that papers over null results.
+**Resilient data layer.** The FRED fetcher retries transient 5xx/timeout failures with linear backoff and a longer read timeout; the stress engine logs a warning (rather than silently dropping a scenario) when a trigger column is missing from the panel. These were added after observing that free public feeds drop intermittently and a pipeline that degrades quietly is worse than one that degrades loudly.
 
 ---
 
 ## Limitations
 
-Scope conditions on the headline finding:
+**Scope of the null finding.**
+- The null result on tactical timing is conditional on this design — this feature set, a 3-state Gaussian HMM, weekly horizon, and a European cross-asset universe. A different model, horizon, or market could differ; the contribution is the rigorous demonstration, not a universal law.
+- Honest walk-forward leaves only a handful of true regime transitions post-2011, so statistical power on the *timing* claim is modest. The risk-monitoring claim is far better supported. (The earlier full-sample HMM fit handed the regime-tilt strategy a lookahead advantage and it *still* lost to equal-weight — removing that advantage can only reinforce the null finding. The full-sample labels are retained solely for the in-sample regime-conditional risk table, where they are a descriptive, not predictive, statistic.)
+- Costs strengthen, not weaken, the finding: transaction costs and ESTR-financed leverage are modelled (though simplified); tightening them pushes the timing strategies further below equal-weight.
 
-- **The null result is conditional on the design.** It holds for this feature set, a 3-state Gaussian HMM, weekly horizon, and a European cross-asset universe; a different model, horizon, or market could differ — the contribution is the rigorous *demonstration*, not a universal law.
-- **HMM assumptions are strong.** Gaussian emissions and a first-order Markov structure miss fat tails and longer-memory regime persistence.
-- **Limited regime switches in the OOS sample.** Honest walk-forward leaves only a handful of true regime transitions post-2011, so statistical power on the *timing* claim is modest (the risk-monitoring claim is far better supported).
-- **Publication lags are approximated** (e.g. 30 days for HICP) rather than reconstructed from true data vintages.
-- **Costs strengthen, not weaken, the finding.** Transaction costs and ESTR-financed leverage are modelled but simplified; tightening them pushes the timing strategies further below equal-weight.
+**Modelling simplifications.**
+- HMM assumptions are strong — Gaussian emissions and a first-order Markov structure miss fat tails and longer-memory regime persistence.
+- Stress transmission uses linear empirical betas; tail co-movement is non-linear in practice (conditional copulas or a regime-switching factor model would be more faithful).
+- Weekly frequency limits ML training data — the drawdown classifier reached AUC 0.51, partly because weekly horizon yields few positive examples per refit window.
+- Publication lags are approximated (e.g. 30 days for HICP) rather than reconstructed from true data vintages.
+
+**Data quirks.**
+- Italian and French 10Y yields can run ~90 days stale due to FRED's OECD update cadence; flagged at build time by the freshness check.
+- VSTOXX (V2X) is unavailable on Yahoo Finance and is replaced by SX5E rolling realised volatility.
+
+---
 
 ## Testing
 
@@ -230,6 +220,26 @@ pytest tests/ -q          # 5 tests
 ```
 
 Tests run automatically on every push via GitHub Actions (`.github/workflows/tests.yml`).
+
+---
+
+## Tech stack
+
+- **Modeling**: hmmlearn (HMM), LightGBM (forecasting), SciPy (optimization)
+- **Data**: pandas, numpy, pyarrow (parquet), requests, yfinance
+- **Visualization**: matplotlib, plotly (Streamlit)
+- **Deliverables**: openpyxl (Excel), python-pptx (PowerPoint), Streamlit (dashboard)
+- **All code**: Python 3.12, modular architecture
+
+---
+
+## Author
+
+Shrish Dhuria · ESSEC Master in Finance · May 2026
+
+Built as a research framework demonstrating institutional methodology in regime detection, multi-asset risk analysis, and walk-forward tactical allocation. The negative finding on tactical regime-tilting is the deliberate intellectual contribution — research that documents what *doesn't* work, and why, is more useful than work that papers over null results.
+
+---
 
 ## License
 

@@ -63,7 +63,7 @@ def main():
     try:
         build_unified_short_rate()
     except Exception as e:
-        log.error(f"EONIA fetch failed: {type(e).__name__}: {e}"); sys.exit(1)
+        log.error(f"short-rate build failed: {type(e).__name__}: {e}"); sys.exit(1)
 
     log.info("=== Step 2: assembling HMM input matrix ===")
     X, raw = assemble_hmm_inputs()
